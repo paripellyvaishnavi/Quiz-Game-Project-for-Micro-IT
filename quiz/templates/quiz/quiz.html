@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Take Quiz</title>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .question { margin-bottom: 20px; }
+        .result { margin-top: 30px; }
+    </style>
+</head>
+<body>
+
+    <h1>Take Quiz</h1>
+    <select id="quizSelect">
+        <option value="">-- Select a Quiz --</option>
+    </select>
+    <button onclick="loadQuestions()">Load Questions</button>
+
+    <form id="quizForm" onsubmit="submitQuiz(event)" style="display:none;">
+        <div id="questionsContainer"></div>
+        <button type="submit">Submit</button>
+    </form>
+
+    <div id="resultContainer" class="result"></div>
+
+    <script>
+        let selectedQuizId = null;
+        let questions = [];
+
+        // Load available quizzes
+        fetch('/api/quizzes/')
+            .then(res => res.json())
+            .then(data => {
+                const quizSelect = document.getElementById('quizSelect');
+                data.forEach(quiz => {
+                    const option = document.createElement('option');
+                    option.value = quiz.id;
+                    option.textContent = quiz.title;
+                    quizSelect.appendChild(option);
+                });
+            });
+
+        function loadQuestions() {
+            selectedQuizId = document.getElementById('quizSelect').value;
+            if (!selectedQuizId) {
+                alert("Please select a quiz.");
+                return;
+            }
+
+            fetch(`/api/quizzes/${selectedQuizId}/questions/`)
+                .then(res => res.json())
+                .then(data => {
+                    questions = data;
+                    const container = document.getElementById('questionsContainer');
+                    container.innerHTML = '';
+
+                    data.forEach(question => {
+                        const div = document.createElement('div');
+                        div.className = 'question';
+                        div.innerHTML = `<p><strong>${question.text}</strong></p>`;
+                        question.options.forEach(option => {
+                            div.innerHTML += `
+                                <label>
+                                    <input type="radio" name="question_${question.id}" value="${option.id}">
+                                    ${option.text}
+                                </label><br>
+                            `;
+                        });
+                        container.appendChild(div);
+                    });
+
+                    document.getElementById('quizForm').style.display = 'block';
+                    document.getElementById('resultContainer').innerHTML = '';
+                });
+        }
+
+        function submitQuiz(event) {
+            event.preventDefault();
+            const formData = new FormData(document.getElementById('quizForm'));
+            const payload = {};
+
+            questions.forEach(q => {
+                const value = formData.get(`question_${q.id}`);
+                if (value) {
+                    payload[q.id] = parseInt(value);
+                }
+            });
+
+            fetch(`/api/quizzes/${selectedQuizId}/submit/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(data => {
+                let html = `<h3>Your Score: ${data.score} / ${data.total}</h3>`;
+                data.results.forEach(r => {
+                    html += `
+                        <p><strong>Q:</strong> ${r.question}<br>
+                        <strong>Your Answer:</strong> ${r.your_answer}<br>
+                        <strong>Correct Answer:</strong> ${r.correct_answer}<br>
+                        <strong>Correct:</strong> ${r.is_correct ? 'Yes' : 'No'}</p>
+                        <hr>
+                    `;
+                });
+                document.getElementById('resultContainer').innerHTML = html;
+            });
+        }
+    </script>
+
+</body>
+</html>
